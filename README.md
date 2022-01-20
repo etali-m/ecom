@@ -1,1 +1,1 @@
-#Ecommerce platforme with django
+# Ecommerce platforme with django
