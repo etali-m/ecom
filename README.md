@@ -1,1 +1,0 @@
-Ecommerce website with django
