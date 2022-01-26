@@ -5,21 +5,13 @@ import datetime
 
 
 from .models import *
+from .utils import cookieCart, cartData, guestOrder
 
 # Create your views here.
 def store(request):
 
-    if request.user.is_authenticated: #we check if the user is authenticated to get all items of his order
-        customer = request.user.customer 
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-            #order is the retrieved or the created Order and created is a boolean
-            #specifying wheter a new Order was created.
-        items = order.orderitem_set.all()
-        cartItems = order.get_cart_items
-    else:
-        items=[]
-        order = {'get_cart_total':0, 'get_cart_items':0, 'shipping': False}
-        cartItems = order['get_cart_items']
+    data = cartData(request)
+    cartItems = data['cartItems'] 
 
     products = Product.objects.all()
     context = {'products':products, 'cartItems':cartItems}
@@ -28,36 +20,22 @@ def store(request):
     
 def cart(request):
 
-    if request.user.is_authenticated: #we check if the user is authenticated to get all items of his order
-        customer = request.user.customer 
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-            #order is the retrieved or the created Order and created is a boolean
-            #specifying wheter a new Order was created.
-        items = order.orderitem_set.all()
-            #We get all the order items who has order as a parent order
-        cartItems = order.get_cart_items
-    else:
-        items=[]
-        order = {'get_cart_total':0, 'get_cart_items':0, 'shipping': False}
-        cartItems = order['get_cart_items']
+    data = cartData(request)
+    cartItems = data['cartItems']
+    order = data['order']
+    items = data['items']
+            
 
     context = {'items': items, 'order':order, 'cartItems':cartItems}
     return render(request, 'store/cart.html', context)
 
 
 def checkout(request):
-    if request.user.is_authenticated: #we check if the user is authenticated to get all items of his order
-        customer = request.user.customer 
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
-            #order is the retrieved or the created Order and created is a boolean
-            #specifying wheter a new Order was created.
-        items = order.orderitem_set.all()
-            #We get all the order items who has order as a parent order
-        cartItems = order.get_cart_items
-    else:
-        items=[]
-        order = {'get_cart_total':0, 'get_cart_items':0, 'shipping': False}
-        cartItems = order['get_cart_items']
+     
+    data = cartData(request)
+    cartItems = data['cartItems']
+    order = data['order']
+    items = data['items']
 
     context = {'items': items, 'order':order, 'cartItems':cartItems}
     return render(request, 'store/checkout.html', context)
@@ -94,31 +72,34 @@ def updateItem(request):
     return JsonResponse('Item was added', safe=False) 
 
 
-#this function is the process to save order
+#this function is the process to save an order
 def processOrder(request):
     transaction_id =  datetime.datetime.now().timestamp()
     data = json.loads(request.body)
 
-    if request.user.is_authenticated:
+    if request.user.is_authenticated:#if the user is authenticated
         customer = request.user.customer
         order, created = Order.objects.get_or_create(customer=customer, complete=False)
-        total = float(data['form']['total'])
-        order.transaction_id = transaction_id
 
-        if total == float(order.get_cart_total): 
-            order.complete = True
-        order.save()
+    else: #if it is a guest user
+       customer, order = guestOrder(request, data)
 
-        if order.shipping == True:
-            ShippingAddress.objects.create(
-                customer = customer,
-                order = order,
-                address = data['shipping']['address'],
-                city = data['shipping']['city'],
-                state = data['shipping']['state'],
-                zipcode = data['shipping']['zipcode']
-            )
+    #for any type of user who is checking out we have to confirm the total
+    total = float(data['form']['total'])
+    order.transaction_id = transaction_id
 
-    else:
-        print('User is not logged in..')
+    if total == float(order.get_cart_total): 
+        order.complete = True
+    order.save()
+
+    if order.shipping == True:
+        ShippingAddress.objects.create(
+            customer = customer,
+            order = order,
+            address = data['shipping']['address'],
+            city = data['shipping']['city'],
+            state = data['shipping']['state'],
+            zipcode = data['shipping']['zipcode']
+        )
+
     return JsonResponse('Payment complete..', safe=False) 
